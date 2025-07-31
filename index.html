@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BOM Explorer and Cost Comparison</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .tree li {
+            list-style-type: none;
+            margin: 0;
+            padding: 0;
+            position: relative;
+        }
+        .tree li::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -20px;
+            border-left: 1px solid #9ca3af;
+            height: 100%;
+            width: 1px;
+        }
+        .tree li:last-child::before {
+            height: 1.125rem;
+        }
+        .tree li::after {
+            content: '';
+            position: absolute;
+            top: 1.125rem;
+            left: -20px;
+            border-top: 1px solid #9ca3af;
+            width: 15px;
+            height: 1px;
+        }
+        .tree > li::before, .tree > li::after {
+            display: none;
+        }
+        .tree-item {
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            transition: background-color 0.2s;
+        }
+        .tree-item:hover {
+            background-color: #e5e7eb;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto bg-white p-6 rounded-2xl shadow-lg">
+
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">Bill of Materials Dashboard</h1>
+        <p class="text-gray-500 mb-6">Explore product structures and compare costs.</p>
+
+        <!-- Tabs -->
+        <div class="border-b border-gray-200">
+            <nav class="flex space-x-4" aria-label="Tabs">
+                <button onclick="changeTab('explorer')" id="tab-explorer" class="tab-btn px-4 py-2 font-medium text-sm rounded-t-lg text-blue-600 border-b-2 border-blue-600">BOM Explorer</button>
+                <button onclick="changeTab('comparison')" id="tab-comparison" class="tab-btn px-4 py-2 font-medium text-sm rounded-t-lg text-gray-500 hover:text-gray-700">Cost Comparison</button>
+            </nav>
+        </div>
+
+        <!-- BOM Explorer Tab -->
+        <div id="content-explorer" class="tab-content active mt-6">
+            <div class="flex flex-col md:flex-row gap-6">
+                <!-- Bundle Selection -->
+                <div class="md:w-1/4">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">Select a Bundle</h2>
+                    <div id="bundle-list" class="space-y-2">
+                        <!-- Bundles will be dynamically inserted here -->
+                    </div>
+                </div>
+                <!-- BOM Tree View -->
+                <div class="md:w-3/4">
+                     <h2 class="text-xl font-semibold text-gray-700 mb-4">Product Structure</h2>
+                     <div id="bom-tree-container" class="p-4 bg-gray-50 rounded-lg border border-gray-200 min-h-[300px] max-h-[600px] overflow-y-auto">
+                        <p class="text-gray-500">Select a bundle to see its structure.</p>
+                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cost Comparison Tab -->
+        <div id="content-comparison" class="tab-content mt-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Compare Product Costs</h2>
+            <div class="mb-4">
+                <label for="bundle-select" class="block text-sm font-medium text-gray-700 mb-2">Select bundles to compare:</label>
+                <select id="bundle-select" multiple class="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 h-40">
+                    <!-- Options will be dynamically inserted here -->
+                </select>
+                 <button onclick="generateComparison()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Compare Selected</button>
+            </div>
+            <div id="comparison-table-container" class="overflow-x-auto">
+                <!-- Comparison table will be generated here -->
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Mock Database ---
+        // All data is now generic and anonymized for demonstration purposes.
+        const mockBOMData = {
+            // --- Generic Bundle 1 with Nested Structure ---
+            "Bundle_1": {
+                "name": "Example Bundle 1",
+                "cost": 0,
+                "components": ["SUB-1A", "SUB-1B"]
+            },
+            "SUB-1A": { "name": "Manufacturing Processes", "cost": 0, "components": ["PROC-101"] },
+            "SUB-1B": { "name": "Component Materials", "cost": 0, "components": ["CAT-101", "CAT-102"] },
+            "CAT-101": { "name": "Adhesives & Sealants", "cost": 0, "components": ["MAT-111", "MAT-112"] },
+            "CAT-102": { "name": "Fasteners & Sheeting", "cost": 0, "components": ["MAT-121", "MAT-122"] },
+
+            "PROC-101": { "name": "Process Alpha", "cost": 15.00, "components": [] },
+            "MAT-111": { "name": "Material A", "cost": 10.50, "components": [] },
+            "MAT-112": { "name": "Material B", "cost": 155.25, "components": [] },
+            "MAT-121": { "name": "Material C", "cost": 5.75, "components": [] },
+            "MAT-122": { "name": "Material D", "cost": 1.00, "components": [] },
+            
+            // --- Generic Bundle 2 ---
+            "Bundle_2": { "name": "Example Bundle 2", "cost": 0, "components": ["MAT-201", "PROC-201", "SUB-2A"] },
+            "MAT-201": { "name": "Material X", "cost": 50, "components": ["MAT-211"] },
+            "PROC-201": { "name": "Process Beta", "cost": 25, "components": [] },
+            "SUB-2A": { "name": "Sub-Assembly K", "cost": 0, "components": ["MAT-202", "PROC-201"] },
+            "MAT-211": { "name": "Raw Material R1", "cost": 20, "components": [] },
+            "MAT-202": { "name": "Material Y", "cost": 75, "components": [] },
+
+            // --- Generic Bundle 3 ---
+            "Bundle_3": { "name": "Example Bundle 3", "cost": 0, "components": ["MAT-202", "MAT-301", "SUB-3A"] },
+            "MAT-301": { "name": "Material Z", "cost": 120, "components": ["MAT-311", "MAT-312"] },
+            "SUB-3A": { "name": "Sub-Assembly L", "cost": 0, "components": ["MAT-201", "PROC-201"] },
+            "MAT-311": { "name": "Raw Material R2", "cost": 40, "components": [] },
+            "MAT-312": { "name": "Raw Material R3", "cost": 30, "components": [] },
+            
+            // --- Generic Bundle 4 ---
+            "Bundle_4": { "name": "Example Bundle 4", "cost": 0, "components": ["MAT-201", "MAT-202", "PROC-201", "PROC-401"] },
+            "PROC-401": { "name": "Process Gamma", "cost": 50, "components": [] }
+        };
+
+        const topLevelBundles = ["Bundle_1", "Bundle_2", "Bundle_3", "Bundle_4"];
+
+        // --- Tab Management ---
+        function changeTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.getElementById(`content-${tabName}`).classList.add('active');
+
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('text-blue-600', 'border-blue-600');
+                btn.classList.add('text-gray-500', 'hover:text-gray-700');
+            });
+            document.getElementById(`tab-${tabName}`).classList.add('text-blue-600', 'border-blue-600');
+            document.getElementById(`tab-${tabName}`).classList.remove('text-gray-500', 'hover:text-gray-700');
+        }
+
+        // --- BOM Explorer Logic ---
+        const bundleListEl = document.getElementById('bundle-list');
+        const bomTreeContainerEl = document.getElementById('bom-tree-container');
+
+        function displayBundle(bundleId) {
+            const bundle = mockBOMData[bundleId];
+            if (!bundle) return;
+
+            bomTreeContainerEl.innerHTML = `<ul class="tree">${createTreeHTML(bundleId)}</ul>`;
+            // Add event listeners to the new tree items
+            bomTreeContainerEl.querySelectorAll('.tree-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const subList = item.nextElementSibling;
+                    if (subList && subList.tagName === 'UL') {
+                        subList.style.display = subList.style.display === 'none' ? 'block' : 'none';
+                        item.querySelector('svg').classList.toggle('rotate-90');
+                    }
+                });
+            });
+        }
+
+        function createTreeHTML(itemId) {
+            const item = mockBOMData[itemId];
+            if (!item) return `<li>Error: Item ${itemId} not found</li>`;
+
+            let html = `<li>
+                <div class="tree-item flex items-center p-1">`;
+            
+            if (item.components && item.components.length > 0) {
+                 html += `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-gray-500 transition-transform flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>`;
+            } else {
+                 html += `<div class="w-5 mr-2 flex-shrink-0"></div>`; // Placeholder for alignment
+            }
+
+            html += `<span class="font-semibold text-gray-800">${itemId}</span>
+                    <span class="text-gray-600 ml-2 truncate" title="${item.name}">- ${item.name}</span>
+                    <span class="ml-auto font-mono text-blue-600 pl-2">$${(item.cost || 0).toFixed(2)}</span>
+                </div>`;
+
+            if (item.components && item.components.length > 0) {
+                html += `<ul class="ml-5 pl-5 border-l border-gray-300" style="display: none;">`;
+                item.components.forEach(componentId => {
+                    html += createTreeHTML(componentId);
+                });
+                html += `</ul>`;
+            }
+            html += `</li>`;
+            return html;
+        }
+
+
+        // --- Cost Comparison Logic ---
+        const bundleSelectEl = document.getElementById('bundle-select');
+        const comparisonTableContainerEl = document.getElementById('comparison-table-container');
+
+        function generateComparison() {
+            const selectedBundles = Array.from(bundleSelectEl.selectedOptions).map(option => option.value);
+            if (selectedBundles.length === 0) {
+                comparisonTableContainerEl.innerHTML = `<p class="text-gray-500">Please select at least one bundle to compare.</p>`;
+                return;
+            }
+
+            const allCoreComponents = new Set();
+            const bundleCosts = {};
+
+            selectedBundles.forEach(bundleId => {
+                const costs = getFullCostBreakdown(bundleId);
+                bundleCosts[bundleId] = costs;
+                Object.keys(costs.core).forEach(coreId => allCoreComponents.add(coreId));
+            });
+            
+            let tableHTML = `<table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Component</th>`;
+            selectedBundles.forEach(bundleId => {
+                tableHTML += `<th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">${mockBOMData[bundleId].name} (${bundleId})</th>`;
+            });
+            tableHTML += `</tr></thead><tbody class="bg-white divide-y divide-gray-200">`;
+
+            // Core component rows
+            Array.from(allCoreComponents).sort().forEach(coreId => {
+                tableHTML += `<tr><td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${mockBOMData[coreId].name} (${coreId})</td>`;
+                selectedBundles.forEach(bundleId => {
+                    const cost = bundleCosts[bundleId].core[coreId] || 0;
+                    tableHTML += `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right font-mono">$${cost.toFixed(2)}</td>`;
+                });
+                tableHTML += `</tr>`;
+            });
+
+            // Total row
+            tableHTML += `<tr class="bg-gray-50"><td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">Total Cost</td>`;
+            selectedBundles.forEach(bundleId => {
+                const total = bundleCosts[bundleId].total;
+                tableHTML += `<td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800 text-right font-mono">$${total.toFixed(2)}</td>`;
+            });
+            tableHTML += `</tr>`;
+
+            tableHTML += `</tbody></table>`;
+            comparisonTableContainerEl.innerHTML = tableHTML;
+        }
+        
+        /**
+         * Calculates the total cost and core component cost breakdown for a given item.
+         */
+        function getFullCostBreakdown(itemId) {
+            const coreCosts = {};
+
+            function findCoreComponents(id, visited = {}) {
+                if (visited[id] || !mockBOMData[id]) return;
+                visited[id] = true;
+                
+                const currentItem = mockBOMData[id];
+                
+                if (currentItem.components && currentItem.components.length > 0) {
+                    // It's an assembly, recurse through its children
+                    currentItem.components.forEach(childId => findCoreComponents(childId, {...visited}));
+                } else {
+                    // It's a leaf node (a "core" component)
+                    coreCosts[id] = (coreCosts[id] || 0) + (currentItem.cost || 0);
+                }
+            }
+
+            findCoreComponents(itemId);
+            
+            const calculatedTotal = Object.values(coreCosts).reduce((sum, cost) => sum + cost, 0);
+
+            return { total: calculatedTotal, core: coreCosts };
+        }
+
+
+        // --- Initialization ---
+        function initialize() {
+            // Populate BOM Explorer List
+            topLevelBundles.forEach(bundleId => {
+                const bundleData = mockBOMData[bundleId];
+                if (!bundleData) return; // Skip if data for a bundle is missing
+                const button = document.createElement('button');
+                button.className = 'w-full text-left px-4 py-2 bg-white border border-gray-300 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500';
+                button.textContent = `${bundleData.name} (${bundleId})`;
+                button.onclick = () => displayBundle(bundleId);
+                bundleListEl.appendChild(button);
+            });
+
+            // Populate Cost Comparison Selector
+            topLevelBundles.forEach(bundleId => {
+                 const bundleData = mockBOMData[bundleId];
+                if (!bundleData) return;
+                const option = document.createElement('option');
+                option.value = bundleId;
+                option.textContent = `${bundleData.name} (${bundleId})`;
+                bundleSelectEl.appendChild(option);
+            });
+        }
+
+        // Run on page load
+        document.addEventListener('DOMContentLoaded', initialize);
+
+    </script>
+</body>
+</html>
